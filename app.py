@@ -1,39 +1,56 @@
+import os
 from flask import Flask, request, jsonify
 import joblib
-import os
 import pandas as pd
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LogisticRegression
 
+# Initialize the Flask app
 app = Flask(__name__)
 
-# Load the pre-trained model and vectorizer
+# Load the model, vectorizer, and label encoder
 model = joblib.load('model/model.pkl')
-vectorizer = joblib.load('model/vectorizer.pkl')  # assuming you saved the vectorizer
+vectorizer = joblib.load('model/vectorizer.pkl')
+label_encoder = joblib.load('model/label_encoder.pkl')  # Ensure you save the LabelEncoder when training the model
 
+def predict_url_type(url):
+    """
+    Predicts the type of a given URL using the trained model.
+    """
+    # Vectorize the input URL
+    url_vect = vectorizer.transform([url])
+
+    # Predict using the trained model
+    prediction = model.predict(url_vect)
+
+    # Convert the numerical label back to the original category
+    predicted_label = label_encoder.inverse_transform(prediction)
+
+    return predicted_label[0]
+
+# Routes
 @app.route('/')
 def home():
-    return "Welcome to the URL Prediction API!"
+    return "Welcome to the URL Prediction API"
 
 @app.route('/predict', methods=['POST'])
 def predict():
+    """
+    API endpoint to predict the type of a URL.
+    Expects JSON input: {"url": "<URL>"}
+    """
     try:
-        # Get the URL from the request
         data = request.get_json()
         url = data.get('url')
+        if not url:
+            return jsonify({"error": "No URL provided"}), 400
 
-        # Vectorize the URL using the pre-trained vectorizer
-        url_vect = vectorizer.transform([url])
+        # Predict the URL type
+        predicted_type = predict_url_type(url)
 
-        # Make the prediction using the trained model
-        prediction = model.predict(url_vect)[0]
-
-        # Return the result
-        return jsonify({'prediction': prediction}), 200
+        return jsonify({"url": url, "prediction": predicted_type})
     except Exception as e:
-        return jsonify({'error': str(e)}), 400
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
+    # Get the port from the environment variable or use 5000 as a fallback
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
